@@ -1,4 +1,4 @@
-# mcp-feedback-web
+# mcp-feedback-nodesktop
 
 A web-based Interactive Feedback server for MCP (Model Context Protocol), designed for headless Linux servers. Replaces the desktop GUI (PySide6) approach with a browser-based interface that supports full CJK input and bilingual UI (English/Chinese).
 
@@ -6,7 +6,7 @@ A web-based Interactive Feedback server for MCP (Model Context Protocol), design
 
 The original [interactive-feedback-mcp](https://github.com/noopstudios/interactive-feedback-mcp) uses PySide6 (Qt) to display a desktop feedback dialog. This doesn't work on headless Linux servers, and even with X11 forwarding, the Windows input method (IME) cannot be used in the forwarded window.
 
-**mcp-feedback-web** solves this by serving the feedback UI as a web page. The browser on your local machine handles everything — including Chinese/Japanese/Korean input — natively.
+**mcp-feedback-nodesktop** solves this by serving the feedback UI as a web page. The browser on your local machine handles everything — including Chinese/Japanese/Korean input — natively.
 
 ## Architecture
 
@@ -76,8 +76,8 @@ After=network.target
 [Service]
 Type=simple
 User=root
-WorkingDirectory=/path/to/mcp-feedback-web
-ExecStart=/path/to/mcp-feedback-web/.venv/bin/python web_feedback.py --server
+WorkingDirectory=/path/to/mcp-feedback-nodesktop
+ExecStart=/path/to/mcp-feedback-nodesktop/.venv/bin/python web_feedback.py --server
 Restart=always
 RestartSec=5
 

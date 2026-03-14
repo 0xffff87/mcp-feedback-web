@@ -1,4 +1,4 @@
-# mcp-feedback-web
+# mcp-feedback-nodesktop
 
 基于 Web 的 MCP（Model Context Protocol）交互式反馈服务器，专为无桌面环境的 Linux 服务器设计。使用浏览器界面替代桌面 GUI（PySide6），完美支持中文输入，界面支持中英文切换。
 
@@ -6,7 +6,7 @@
 
 原版 [interactive-feedback-mcp](https://github.com/noopstudios/interactive-feedback-mcp) 使用 PySide6（Qt）弹出桌面反馈窗口。但在无桌面的 Linux 服务器上无法使用，即使通过 X11 转发显示窗口，也无法使用 Windows 端的中文输入法。
 
-**mcp-feedback-web** 将反馈界面改为 Web 页面。浏览器原生支持中文输入，无需任何额外配置。
+**mcp-feedback-nodesktop** 将反馈界面改为 Web 页面。浏览器原生支持中文输入，无需任何额外配置。
 
 ## 架构原理
 
@@ -76,8 +76,8 @@ After=network.target
 [Service]
 Type=simple
 User=root
-WorkingDirectory=/path/to/mcp-feedback-web
-ExecStart=/path/to/mcp-feedback-web/.venv/bin/python web_feedback.py --server
+WorkingDirectory=/path/to/mcp-feedback-nodesktop
+ExecStart=/path/to/mcp-feedback-nodesktop/.venv/bin/python web_feedback.py --server
 Restart=always
 RestartSec=5
 
