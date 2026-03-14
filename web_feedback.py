@@ -104,7 +104,7 @@ class FeedbackHandler(BaseHTTPRequestHandler):
 
 def get_html_page():
     return """<!DOCTYPE html>
-<html lang="zh-CN">
+<html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -131,34 +131,63 @@ button{flex:1;padding:11px 20px;border:none;border-radius:8px;font-size:14px;fon
 .toast{position:fixed;top:20px;right:20px;background:#a6e3a1;color:#1e1e2e;padding:12px 24px;border-radius:8px;font-weight:600;z-index:100;opacity:0;transform:translateY(-10px);transition:all .3s;pointer-events:none}
 .toast.show{opacity:1;transform:translateY(0)}
 .project{font-size:12px;color:#6c7086;margin-bottom:16px;padding:6px 10px;background:#1e1e2e;border-radius:6px;font-family:monospace}
+.lang-switch{position:fixed;top:16px;right:16px;background:#45475a;border:none;color:#a6adc8;padding:6px 12px;border-radius:6px;font-size:12px;cursor:pointer}
+.lang-switch:hover{background:#585b70;color:#cdd6f4}
 </style>
 </head>
 <body>
+<button class="lang-switch" id="langBtn" onclick="toggleLang()">EN</button>
 <div class="container">
 <div class="card">
   <div id="waiting" class="waiting">
     <div class="spinner"></div>
-    <p>等待反馈请求...</p>
-    <p style="margin-top:8px;font-size:12px;color:#585b70">保持此页面打开，新请求会自动出现</p>
+    <p id="waitText"></p>
+    <p id="waitHint" style="margin-top:8px;font-size:12px;color:#585b70"></p>
   </div>
   <div id="form" style="display:none">
     <div class="project" id="project"></div>
-    <div class="label">AI 摘要：</div>
+    <div class="label" id="summaryLabel"></div>
     <div class="summary" id="summary"></div>
-    <div class="label">你的反馈：</div>
-    <textarea id="feedback" placeholder="输入反馈...按 Enter 提交，Shift+Enter 换行"></textarea>
+    <div class="label" id="feedbackLabel"></div>
+    <textarea id="feedback"></textarea>
     <div class="btn-row">
-      <button class="btn-empty" onclick="submitEmpty()">无反馈</button>
-      <button class="btn-submit" id="submitBtn" onclick="submitFeedback()">提交</button>
+      <button class="btn-empty" id="emptyBtn" onclick="submitEmpty()"></button>
+      <button class="btn-submit" id="submitBtn" onclick="submitFeedback()"></button>
     </div>
   </div>
 </div>
 </div>
-<div class="toast" id="toast">已提交！</div>
+<div class="toast" id="toast"></div>
 <script>
-let polling=false,titleInterval=null,origTitle=document.title;
+var L={
+  zh:{wait:"Waiting for feedback request...",hint:"Keep this page open, new requests appear automatically",
+      summary:"AI Summary:",feedback:"Your Feedback:",placeholder:"Type feedback... Enter to submit, Shift+Enter for newline",
+      empty:"No Feedback",submit:"Submit",submitted:"Submitted!",
+      wait_zh:"\u7b49\u5f85\u53cd\u9988\u8bf7\u6c42...",hint_zh:"\u4fdd\u6301\u6b64\u9875\u9762\u6253\u5f00\uff0c\u65b0\u8bf7\u6c42\u4f1a\u81ea\u52a8\u51fa\u73b0",
+      summary_zh:"AI \u6458\u8981\uff1a",feedback_zh:"\u4f60\u7684\u53cd\u9988\uff1a",placeholder_zh:"\u8f93\u5165\u53cd\u9988...\u6309 Enter \u63d0\u4ea4\uff0cShift+Enter \u6362\u884c",
+      empty_zh:"\u65e0\u53cd\u9988",submit_zh:"\u63d0\u4ea4",submitted_zh:"\u5df2\u63d0\u4ea4\uff01"}
+};
+var lang=navigator.language.startsWith("zh")?"zh":"en";
+function t(key){
+  if(lang==="zh"){var zhKey=key+"_zh";return L.zh[zhKey]||L.zh[key]}
+  return L.zh[key];
+}
+function applyLang(){
+  document.getElementById("waitText").textContent=t("wait");
+  document.getElementById("waitHint").textContent=t("hint");
+  document.getElementById("summaryLabel").textContent=t("summary");
+  document.getElementById("feedbackLabel").textContent=t("feedback");
+  document.getElementById("feedback").placeholder=t("placeholder");
+  document.getElementById("emptyBtn").textContent=t("empty");
+  document.getElementById("submitBtn").textContent=t("submit");
+  document.getElementById("langBtn").textContent=lang==="zh"?"EN":"\u4e2d\u6587";
+}
+function toggleLang(){lang=lang==="zh"?"en":"zh";applyLang()}
+applyLang();
+
+var polling=false,titleInterval=null,origTitle=document.title;
 function flashTitle(m){
-  let on=true;
+  var on=true;
   if(titleInterval)clearInterval(titleInterval);
   titleInterval=setInterval(function(){document.title=on?m:origTitle;on=!on},800);
 }
@@ -167,8 +196,8 @@ async function poll(){
   if(polling)return;polling=true;
   while(true){
     try{
-      const r=await fetch("/api/poll");
-      const d=await r.json();
+      var r=await fetch("/api/poll");
+      var d=await r.json();
       if(d.has_request){showReq(d.request);polling=false;return}
     }catch(e){await new Promise(function(r){setTimeout(r,2000)})}
   }
@@ -197,7 +226,7 @@ async function doSubmit(text){
 }
 function submitFeedback(){doSubmit(document.getElementById("feedback").value)}
 function submitEmpty(){doSubmit("")}
-function showToast(){var t=document.getElementById("toast");t.classList.add("show");setTimeout(function(){t.classList.remove("show")},2000)}
+function showToast(){var el=document.getElementById("toast");el.textContent=t("submitted");el.classList.add("show");setTimeout(function(){el.classList.remove("show")},2000)}
 document.getElementById("feedback").addEventListener("keydown",function(e){
   if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();submitFeedback()}
 });
