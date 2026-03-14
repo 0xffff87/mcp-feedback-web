@@ -1,0 +1,9 @@
+.git
+.github
+.venv
+images
+*.lock
+*.bak
+__pycache__
+.python-version
+feedback_ui.py

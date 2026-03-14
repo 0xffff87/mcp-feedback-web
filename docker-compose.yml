@@ -1,0 +1,7 @@
+services:
+  mcp-web-feedback:
+    build: .
+    container_name: mcp-web-feedback
+    ports:
+      - "8765:8765"
+    restart: unless-stopped
