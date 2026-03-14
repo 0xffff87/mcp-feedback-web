@@ -1,6 +1,6 @@
 # mcp-feedback-web
 
-A web-based Interactive Feedback server for MCP (Model Context Protocol), designed for headless Linux servers. Replaces the desktop GUI (PySide6) approach with a browser-based interface that supports full CJK input.
+A web-based Interactive Feedback server for MCP (Model Context Protocol), designed for headless Linux servers. Replaces the desktop GUI (PySide6) approach with a browser-based interface that supports full CJK input and bilingual UI (English/Chinese).
 
 ## Why This Project?
 
@@ -50,25 +50,17 @@ The original [interactive-feedback-mcp](https://github.com/noopstudios/interacti
 ### Docker (Recommended)
 
 ```bash
-# Clone or copy the project files
-cd mcp-feedback-web
-
-# Build and start
 docker compose up -d
-
-# Verify
-docker compose ps
-# STATUS should show "healthy"
+docker compose ps   # STATUS should show "healthy"
 ```
+
+The container uses `restart: unless-stopped`, so it will automatically start after system reboot (as long as Docker is enabled).
 
 ### Manual Installation
 
 ```bash
-# Requires Python 3.11+
 python3 -m venv .venv
 .venv/bin/pip install fastmcp pydantic
-
-# Start the web server
 .venv/bin/python web_feedback.py --server
 ```
 
@@ -102,20 +94,41 @@ systemctl enable --now mcp-web-feedback
 
 ### 1. Start the Web Server
 
-Use any of the deployment methods above. Verify it's running:
+Deploy using any method above. Verify:
 
 ```bash
 curl http://127.0.0.1:8765/api/status
 # {"status": "running"}
 ```
 
-### 2. Open the Browser
+### 2. Open the Browser (Important!)
 
-Navigate to `http://<server-ip>:8765` on your local machine. **Keep this tab open** — it will automatically receive new feedback requests without refreshing.
+Navigate to `http://<server-ip>:8765` on your local machine.
+
+**You must keep this browser tab open at all times.** The page will automatically receive new feedback requests via long polling — no manual refresh needed. When a new request arrives, the tab title will flash and a browser notification will appear (if permitted).
+
+> **Note:** The web server cannot automatically open a browser on your local machine. You need to open the URL manually once. After that, just keep the tab open.
 
 ### 3. Configure Cursor MCP
 
-Add to your Cursor MCP configuration (`.cursor/mcp.json`):
+Add to your Cursor MCP configuration (`.cursor/mcp.json`).
+
+**For Docker deployment on the same machine:**
+
+```json
+{
+  "mcpServers": {
+    "interactive-feedback": {
+      "command": "docker",
+      "args": ["exec", "-i", "mcp-web-feedback", "python", "server.py"],
+      "timeout": 600,
+      "autoApprove": ["interactive_feedback"]
+    }
+  }
+}
+```
+
+**For remote access via SSH (e.g., from a Windows machine):**
 
 ```json
 {
@@ -124,17 +137,20 @@ Add to your Cursor MCP configuration (`.cursor/mcp.json`):
       "command": "ssh",
       "args": [
         "your-server",
-        "cd /path/to/mcp-feedback-web && .venv/bin/python server.py"
-      ]
+        "docker exec -i mcp-web-feedback python server.py"
+      ],
+      "timeout": 600,
+      "autoApprove": ["interactive_feedback"]
     }
   }
 }
 ```
 
-For Docker deployments, run `server.py` on the host machine (it connects to the container via `127.0.0.1:8765`).
+> **Tip:** The `-i` flag in `docker exec -i` is required to keep stdin open for MCP stdio transport.
 
 ### 4. Features
 
+- Bilingual UI (English/Chinese) with auto language detection and manual switch
 - Tab title flashes when a new request arrives
 - Browser notification support (requires permission)
 - **Enter** to submit, **Shift+Enter** for newline
@@ -167,43 +183,14 @@ In client mode, if no server is detected, it automatically starts one as a daemo
 | POST | `/api/submit` | Submit feedback |
 | POST | `/api/get_response` | Block until feedback is submitted (300s timeout) |
 
-### Request Format
-
-**Create request** `POST /api/request`:
-```json
-{
-  "project_directory": "/path/to/project",
-  "prompt": "Summary from AI"
-}
-```
-
-**Submit feedback** `POST /api/submit`:
-```json
-{
-  "interactive_feedback": "User's feedback text",
-  "logs": ""
-}
-```
-
 ## File Structure
 
 | File | Purpose |
 |------|---------|
 | `server.py` | MCP server, communicates with Cursor via stdio |
 | `web_feedback.py` | Web feedback server + client (dual mode) |
-| `feedback_ui.py` | Original PySide6 desktop UI (kept for reference) |
 | `Dockerfile` | Docker image build file |
 | `docker-compose.yml` | Docker Compose configuration |
-| `.dockerignore` | Docker build ignore rules |
-
-## Networking
-
-- Port **8765** on the Linux server must be accessible from the local machine
-- Firewall rules:
-  ```bash
-  # Linux (ufw)
-  ufw allow 8765/tcp
-  ```
 
 ## Troubleshooting
 
@@ -216,4 +203,4 @@ In client mode, if no server is detected, it automatically starts one as a daemo
 
 ## Credits
 
-Based on [interactive-feedback-mcp](https://github.com/noopstudios/interactive-feedback-mcp) by Fábio Ferreira. Modified to use a web-based UI instead of PySide6 desktop GUI.
+Based on [interactive-feedback-mcp](https://github.com/noopstudios/interactive-feedback-mcp) by Fábio Ferreira (MIT License). Modified to use a web-based UI instead of PySide6 desktop GUI.
