@@ -12,22 +12,16 @@ from typing import Annotated, Dict
 from fastmcp import FastMCP
 from pydantic import Field
 
-# The log_level is necessary for Cline to work: https://github.com/jlowin/fastmcp/issues/81
-mcp = FastMCP("Interactive Feedback MCP", log_level="ERROR")
+mcp = FastMCP("Interactive Feedback MCP")
 
 def launch_feedback_ui(project_directory: str, summary: str) -> dict[str, str]:
-    # Create a temporary file for the feedback result
     with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as tmp:
         output_file = tmp.name
 
     try:
-        # Get the path to web_feedback.py relative to this script
         script_dir = os.path.dirname(os.path.abspath(__file__))
         feedback_ui_path = os.path.join(script_dir, "web_feedback.py")
 
-        # Run web_feedback.py as a separate process
-        # NOTE: There appears to be a bug in uv, so we need
-        # to pass a bunch of special flags to make this work
         args = [
             sys.executable,
             "-u",
@@ -48,7 +42,6 @@ def launch_feedback_ui(project_directory: str, summary: str) -> dict[str, str]:
         if result.returncode != 0:
             raise Exception(f"Failed to launch feedback UI: {result.returncode}")
 
-        # Read the result from the temporary file
         with open(output_file, 'r') as f:
             result = json.load(f)
         os.unlink(output_file)
