@@ -6,6 +6,7 @@ import time
 import argparse
 import threading
 import subprocess
+import urllib.error
 import urllib.request
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from socketserver import ThreadingMixIn
@@ -19,6 +20,7 @@ HOST = "0.0.0.0"
 
 current_request = None
 current_response = None
+current_request_id = 0
 request_event = threading.Event()
 response_event = threading.Event()
 request_lock = threading.Lock()
@@ -62,13 +64,24 @@ class FeedbackHandler(BaseHTTPRequestHandler):
             self.send_error(404)
 
     def do_POST(self):
-        global current_request, current_response
-        content_length = int(self.headers.get("Content-Length", 0))
+        global current_request, current_response, current_request_id
+        try:
+            content_length = int(self.headers.get("Content-Length", 0))
+        except (ValueError, TypeError):
+            content_length = 0
+        if content_length < 0 or content_length > 1024 * 1024:
+            self.send_error(413, "Payload too large")
+            return
         body = self.rfile.read(content_length)
 
         if self.path == "/api/request":
-            data = json.loads(body)
+            try:
+                data = json.loads(body)
+            except (json.JSONDecodeError, ValueError):
+                self._send_json({"error": "Invalid JSON"}, status=400)
+                return
             with request_lock:
+                current_request_id += 1
                 current_request = data
                 current_response = None
                 response_event.clear()
@@ -76,7 +89,11 @@ class FeedbackHandler(BaseHTTPRequestHandler):
             self._send_json({"status": "ok"})
 
         elif self.path == "/api/submit":
-            data = json.loads(body)
+            try:
+                data = json.loads(body)
+            except (json.JSONDecodeError, ValueError):
+                self._send_json({"error": "Invalid JSON"}, status=400)
+                return
             with request_lock:
                 current_response = data
                 current_request = None
@@ -88,7 +105,9 @@ class FeedbackHandler(BaseHTTPRequestHandler):
             response_event.wait(timeout=300)
             with request_lock:
                 if current_response:
-                    self._send_json({"has_response": True, "response": current_response})
+                    resp = current_response
+                    current_response = None
+                    self._send_json({"has_response": True, "response": resp})
                 else:
                     self._send_json({"has_response": False})
         else:
@@ -254,13 +273,19 @@ def is_server_running():
 
 
 def start_server_daemon():
-    subprocess.Popen(
-        [sys.executable, __file__, "--server"],
+    script_path = os.path.abspath(__file__)
+    kwargs = dict(
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         stdin=subprocess.DEVNULL,
-        start_new_session=True,
     )
+    if sys.platform == "win32":
+        CREATE_NO_WINDOW = 0x08000000
+        DETACHED_PROCESS = 0x00000008
+        kwargs["creationflags"] = DETACHED_PROCESS | CREATE_NO_WINDOW
+    else:
+        kwargs["start_new_session"] = True
+    subprocess.Popen([sys.executable, script_path, "--server"], **kwargs)
     for _ in range(20):
         time.sleep(0.5)
         if is_server_running():
@@ -270,8 +295,13 @@ def start_server_daemon():
 
 def send_request(project_directory, prompt, output_file):
     if not is_server_running():
+        print(f"Web feedback server not running, starting daemon...", file=sys.stderr)
         if not start_server_daemon():
-            raise Exception("Failed to start web feedback server")
+            raise Exception(
+                f"Failed to start web feedback server on port {PORT}. "
+                "Please start it manually: python web_feedback.py --server"
+            )
+        print(f"Web feedback server started on port {PORT}", file=sys.stderr)
 
     data = json.dumps({"project_directory": project_directory, "prompt": prompt}).encode("utf-8")
     req = urllib.request.Request(
@@ -279,21 +309,34 @@ def send_request(project_directory, prompt, output_file):
         data=data,
         headers={"Content-Type": "application/json"},
     )
-    urllib.request.urlopen(req, timeout=5)
+    try:
+        urllib.request.urlopen(req, timeout=5)
+    except Exception as e:
+        raise Exception(f"Failed to send request to web feedback server: {e}")
+
+    print(
+        f"Feedback request sent. Waiting for user response at http://127.0.0.1:{PORT} ...",
+        file=sys.stderr,
+    )
 
     req = urllib.request.Request(
         f"http://127.0.0.1:{PORT}/api/get_response",
         data=b"{}",
         headers={"Content-Type": "application/json"},
     )
-    resp = urllib.request.urlopen(req, timeout=310)
-    result = json.loads(resp.read())
+    try:
+        with urllib.request.urlopen(req, timeout=310) as resp:
+            result = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.URLError as e:
+        raise Exception(f"Failed to get response from web feedback server: {e}")
+    except json.JSONDecodeError as e:
+        raise Exception(f"Invalid JSON response from server: {e}")
 
     if result.get("has_response"):
-        with open(output_file, "w") as f:
+        with open(output_file, "w", encoding="utf-8") as f:
             json.dump(result["response"], f, ensure_ascii=False)
     else:
-        raise Exception("No response received (timeout)")
+        raise Exception("No response received (timeout after 300s)")
 
 
 def main():

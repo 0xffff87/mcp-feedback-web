@@ -15,10 +15,11 @@ from pydantic import Field
 mcp = FastMCP("Interactive Feedback MCP")
 
 def launch_feedback_ui(project_directory: str, summary: str) -> dict[str, str]:
-    with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as tmp:
-        output_file = tmp.name
-
+    output_file = None
     try:
+        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as tmp:
+            output_file = tmp.name
+
         script_dir = os.path.dirname(os.path.abspath(__file__))
         feedback_ui_path = os.path.join(script_dir, "web_feedback.py")
 
@@ -35,21 +36,28 @@ def launch_feedback_ui(project_directory: str, summary: str) -> dict[str, str]:
             check=False,
             shell=False,
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
             stdin=subprocess.DEVNULL,
-            close_fds=True
+            timeout=310,
         )
         if result.returncode != 0:
-            raise Exception(f"Failed to launch feedback UI: {result.returncode}")
+            err_msg = result.stderr.decode("utf-8", errors="replace") if result.stderr else ""
+            raise Exception(f"Failed to launch feedback UI (exit={result.returncode}): {err_msg}")
 
-        with open(output_file, 'r') as f:
-            result = json.load(f)
-        os.unlink(output_file)
-        return result
-    except Exception as e:
-        if os.path.exists(output_file):
-            os.unlink(output_file)
-        raise e
+        if not os.path.exists(output_file) or os.path.getsize(output_file) == 0:
+            raise Exception("Feedback UI exited without writing output")
+
+        with open(output_file, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        return data
+    except subprocess.TimeoutExpired:
+        raise Exception("Feedback UI timed out (310s)")
+    finally:
+        if output_file:
+            try:
+                os.unlink(output_file)
+            except OSError:
+                pass
 
 def first_line(text: str) -> str:
     return text.split("\n")[0].strip()
@@ -63,4 +71,4 @@ def interactive_feedback(
     return launch_feedback_ui(first_line(project_directory), first_line(summary))
 
 if __name__ == "__main__":
-    mcp.run(transport="stdio")
+    mcp.run(transport="stdio", log_level="ERROR")
